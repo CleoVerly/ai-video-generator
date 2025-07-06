@@ -1,4 +1,4 @@
-# app.py - Perbaikan untuk NLTK DownloadError
+# app.py - Perbaikan Final untuk NLTK Resource
 
 import streamlit as st
 import os
@@ -22,10 +22,9 @@ import textwrap
 from deep_translator import GoogleTranslator
 
 # --- PERBAIKAN NLTK ADA DI BLOK INI ---
-# Download 'punkt' untuk pemisahan kalimat
+# Pastikan kita mencari dan mengunduh 'punkt', bukan 'punkt_tab'.
 try:
     nltk.data.find('tokenizers/punkt')
-# Ganti "nltk.downloader.DownloadError" dengan "LookupError"
 except LookupError: 
     print("Paket 'punkt' NLTK tidak ditemukan. Mengunduh...")
     nltk.download('punkt')
@@ -207,14 +206,15 @@ if embedding_model and faiss_index and all_chunks:
                 
                 st.info(f"**Narasi Video:** {answer_text}")
 
-                with st.spinner("Menerjemahkan & Membuat Audio..."):
-                    translated_text = translate_text(answer_text, dest_lang='id')
+                # Kita tidak perlu menerjemahkan lagi karena prompt sudah meminta jawaban dalam Bahasa Indonesia
+                # translated_text = translate_text(answer_text, dest_lang='id')
                     
                 with st.spinner("Mencari gambar latar belakang..."):
                     bg_image_paths = search_pexels_images(query=prompt, count=5)
 
                 with st.spinner("Merender video... Proses ini paling lama."):
-                    final_video_path = create_dynamic_video(translated_text, bg_image_paths)
+                    # Langsung gunakan answer_text karena sudah dalam Bahasa Indonesia
+                    final_video_path = create_dynamic_video(answer_text, bg_image_paths)
                     
                 st.success("Video berhasil dibuat!")
                 st.video(final_video_path)
