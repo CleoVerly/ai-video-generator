@@ -1,4 +1,4 @@
-# app.py - Versi Final Disesuaikan dengan Struktur Data Anda
+# app.py - Perbaikan untuk NLTK DownloadError
 
 import streamlit as st
 import os
@@ -21,11 +21,15 @@ import textwrap
 # Import library untuk terjemahan
 from deep_translator import GoogleTranslator
 
+# --- PERBAIKAN NLTK ADA DI BLOK INI ---
 # Download 'punkt' untuk pemisahan kalimat
 try:
     nltk.data.find('tokenizers/punkt')
-except nltk.downloader.DownloadError:
+# Ganti "nltk.downloader.DownloadError" dengan "LookupError"
+except LookupError: 
+    print("Paket 'punkt' NLTK tidak ditemukan. Mengunduh...")
     nltk.download('punkt')
+# ------------------------------------
 
 # --- 1. KONFIGURASI DAN INISIALISASI ---
 load_dotenv()
@@ -55,30 +59,23 @@ def load_tailwind_cdn():
 def load_models_and_data():
     model = SentenceTransformer(MODEL_NAME_EMBEDDING, device='cpu')
     if not all(os.path.exists(p) for p in [FAISS_PATH, MAPPING_PATH, CHUNKS_PATH]):
-        st.error("Satu atau lebih file data (FAISS/JSON) tidak ditemukan.")
+        st.error(f"Satu atau lebih file data tidak ditemukan. Pastikan path sudah benar: {FAISS_PATH}, {MAPPING_PATH}, {CHUNKS_PATH}")
         return None, None, None, None
     index = faiss.read_index(FAISS_PATH)
     with open(MAPPING_PATH, "r", encoding="utf-8") as f: mapping = json.load(f)
     with open(CHUNKS_PATH, "r", encoding="utf-8") as f: chunks = json.load(f)
     return model, index, chunks, mapping
 
-# ### FUNGSI INI TELAH DIPERBAIKI SESUAI FORMAT DATA ANDA ###
 def search_similar_chunks(query, _model, _index, _chunks, _mapping, k=5):
-    """Mencari chunk relevan dan mengekstrak sumber dari daftar mapping."""
     query_embedding = _model.encode([query])
     distances, indices = _index.search(query_embedding.astype('float32'), k=k)
     
     relevant_chunks = []
-    source_files = set() 
+    source_files = set()
     for i in indices[0]:
-        # Pastikan indeks tidak melebihi panjang list/dictionary
         if i < len(_mapping) and str(i) in _chunks:
-            # Ambil teks chunk
             relevant_chunks.append(_chunks[str(i)])
-            
-            # Ambil deskripsi dari mapping dan ekstrak nama kitab
             description = _mapping[i]
-            # Pisahkan string berdasarkan " - Chunk " dan ambil bagian pertama
             source_name = description.split(" - Chunk ")[0]
             source_files.add(source_name.strip())
     
@@ -87,7 +84,6 @@ def search_similar_chunks(query, _model, _index, _chunks, _mapping, k=5):
             
     return "\n\n---\n\n".join(relevant_chunks), list(source_files)
 
-# Sisa fungsi helper lainnya tetap sama
 def get_answer_from_ai(question, context):
     prompt = f"Berdasarkan konteks berikut:\n\n{context}\n\nJawablah pertanyaan ini dengan jelas dalam Bahasa Indonesia: '{question}'"
     response = requests.post(
