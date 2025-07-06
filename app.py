@@ -1,4 +1,4 @@
-# app.py - Versi dengan Teks Dinamis, Latar Berubah, dan Atribusi Sumber
+# app.py - Versi dengan Teks Dinamis dan Latar Berubah
 
 import streamlit as st
 import os
@@ -55,28 +55,21 @@ def load_tailwind_cdn():
 @st.cache_resource
 def load_models_and_data():
     """Memuat model embedding dan data dari FAISS & JSON."""
-    print("Memuat model embedding dan data...")
     model = SentenceTransformer(MODEL_NAME_EMBEDDING, device='cpu')
-    
     if not all(os.path.exists(p) for p in [FAISS_PATH, MAPPING_PATH, CHUNKS_PATH]):
-        st.error(f"Satu atau lebih file data tidak ditemukan.")
+        st.error("Satu atau lebih file data tidak ditemukan.")
         return None, None, None, None
-        
     index = faiss.read_index(FAISS_PATH)
     with open(MAPPING_PATH, "r", encoding="utf-8") as f: mapping = json.load(f)
     with open(CHUNKS_PATH, "r", encoding="utf-8") as f: chunks = json.load(f)
-
-    print("Model dan data berhasil dimuat.")
     return model, index, chunks, mapping
 
-# ### FUNGSI DIPERBARUI: Sekarang mengembalikan sumber juga ###
 def search_similar_chunks(query, _model, _index, _chunks, _mapping, k=5):
-    """Mencari chunk relevan dan mengekstrak sumber dari daftar mapping."""
+    """Mencari chunk relevan dan mengekstrak sumber."""
     query_embedding = _model.encode([query])
     distances, indices = _index.search(query_embedding.astype('float32'), k=k)
     
-    relevant_chunks = []
-    source_files = set() # Gunakan set untuk menyimpan nama file unik
+    relevant_chunks, source_files = [], set()
     for i in indices[0]:
         if i < len(_mapping) and str(i) in _chunks:
             relevant_chunks.append(_chunks[str(i)])
@@ -84,13 +77,11 @@ def search_similar_chunks(query, _model, _index, _chunks, _mapping, k=5):
             source_name = description.split(" - Chunk ")[0]
             source_files.add(source_name.strip())
     
-    if not relevant_chunks:
-        return "Tidak ada konteks relevan.", []
-            
+    if not relevant_chunks: return "Tidak ada konteks relevan.", []
     return "\n\n---\n\n".join(relevant_chunks), list(source_files)
 
 def get_answer_from_ai(question, context):
-    """Mendapatkan jawaban dari AI melalui OpenRouter."""
+    """Mendapatkan jawaban dari AI."""
     prompt = f"Berdasarkan konteks berikut:\n\n{context}\n\nJawablah pertanyaan ini dengan jelas dalam Bahasa Indonesia: '{question}'"
     response = requests.post(
         url="https://openrouter.ai/api/v1/chat/completions",
@@ -101,27 +92,7 @@ def get_answer_from_ai(question, context):
     response.raise_for_status()
     return response.json()['choices'][0]['message']['content']
 
-# Fungsi create_text_image_with_pillow (tanpa perubahan)
-def create_text_image_with_pillow(text, size=(1280, 720), font_size=50):
-    image = Image.new("RGBA", size, (255, 255, 255, 0))
-    draw = ImageDraw.Draw(image)
-    try:
-        font = ImageFont.truetype("arial.ttf", font_size)
-    except IOError:
-        font = ImageFont.load_default(size=font_size)
-    wrapped_text = "\n".join(textwrap.wrap(text, width=40))
-    text_bbox = draw.multiline_textbbox((0, 0), wrapped_text, font=font)
-    position = ((size[0] - (text_bbox[2] - text_bbox[0])) / 2, (size[1] - (text_bbox[3] - text_bbox[1])) / 2)
-    stroke_width = 2
-    x, y = position
-    draw.multiline_text((x-stroke_width, y), wrapped_text, font=font, fill=(0,0,0,255))
-    draw.multiline_text((x+stroke_width, y), wrapped_text, font=font, fill=(0,0,0,255))
-    draw.multiline_text((x, y-stroke_width), wrapped_text, font=font, fill=(0,0,0,255))
-    draw.multiline_text((x, y+stroke_width), wrapped_text, font=font, fill=(0,0,0,255))
-    draw.multiline_text(position, wrapped_text, font=font, fill=(255,255,255,255))
-    text_image_path = os.path.join(VIDEO_OUTPUT_DIR, f"temp_text_{int(time.time()*1000)}.png")
-    image.save(text_image_path)
-    return text_image_path
+# --- PERUBAHAN DIMULAI DI SINI ---
 
 # ### FUNGSI DIPERBARUI: Mencari beberapa gambar untuk latar ###
 def search_pexels_images(query, count=5):
@@ -150,9 +121,31 @@ def search_pexels_images(query, count=5):
         
     return image_paths
 
-# ### FUNGSI DIPERBARUI: Membuat video dinamis per kalimat ###
+# Fungsi create_text_image_with_pillow (tanpa perubahan)
+def create_text_image_with_pillow(text, size=(1280, 720), font_size=50):
+    image = Image.new("RGBA", size, (255, 255, 255, 0))
+    draw = ImageDraw.Draw(image)
+    try:
+        font = ImageFont.truetype("arial.ttf", font_size)
+    except IOError:
+        font = ImageFont.load_default(size=font_size)
+    wrapped_text = "\n".join(textwrap.wrap(text, width=40))
+    text_bbox = draw.multiline_textbbox((0, 0), wrapped_text, font=font)
+    position = ((size[0] - (text_bbox[2] - text_bbox[0])) / 2, (size[1] - (text_bbox[3] - text_bbox[1])) / 2)
+    stroke_width = 2
+    x, y = position
+    draw.multiline_text((x-stroke_width, y), wrapped_text, font=font, fill=(0,0,0,255))
+    draw.multiline_text((x+stroke_width, y), wrapped_text, font=font, fill=(0,0,0,255))
+    draw.multiline_text((x, y-stroke_width), wrapped_text, font=font, fill=(0,0,0,255))
+    draw.multiline_text((x, y+stroke_width), wrapped_text, font=font, fill=(0,0,0,255))
+    draw.multiline_text(position, wrapped_text, font=font, fill=(255,255,255,255))
+    text_image_path = os.path.join(VIDEO_OUTPUT_DIR, f"temp_text_{int(time.time()*1000)}.png")
+    image.save(text_image_path)
+    return text_image_path
+
+# ### FUNGSI BARU: Menggantikan create_video lama dengan versi dinamis ###
 def create_dynamic_video(full_text, bg_image_paths):
-    # Pecah teks menjadi kalimat-kalimat menggunakan NLTK
+    # Pecah teks menjadi kalimat-kalimat
     sentences = nltk.sent_tokenize(full_text)
     video_clips = []
     files_to_delete = []
@@ -198,10 +191,12 @@ def create_dynamic_video(full_text, bg_image_paths):
         
     return video_output_path
 
+# --- PERUBAHAN SELESAI ---
 
 # --- 3. MEMBANGUN APLIKASI STREAMLIT ---
 
 load_tailwind_cdn()
+# Sesuaikan pemanggilan fungsi load_models_and_data
 embedding_model, faiss_index, all_chunks, mapping = load_models_and_data()
 
 st.markdown("<h1 class='text-4xl font-bold text-center text-gray-800 my-4'>🎬 AI Video Generator Dinamis</h1>", unsafe_allow_html=True)
@@ -227,8 +222,7 @@ if embedding_model and faiss_index and all_chunks:
                 
                 # Kita tidak lagi menggunakan fungsi translate karena AI sudah diminta menjawab dalam Bahasa Indonesia
                 
-                with st.spinner("Mencari gambar latar belakang (bisa butuh waktu)..."):
-                    # Cari 5 gambar untuk variasi latar
+                with st.spinner("Mencari gambar latar belakang..."):
                     bg_image_paths = search_pexels_images(query=prompt, count=5)
 
                 with st.spinner("Merender video... Proses ini paling lama."):
