@@ -1,9 +1,10 @@
+# Versi 1.1 - Memaksa reinstall
 streamlit
 faiss-cpu
 sentence-transformers
 gtts
 requests
-moviepy
+moviepy==1.0.3
 Pillow
 python-dotenv
 numpy
