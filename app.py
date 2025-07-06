@@ -20,7 +20,7 @@ from PIL import Image, ImageDraw, ImageFont
 import textwrap
 
 # Import library untuk terjemahan
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 
 # --- 1. KONFIGURASI DAN INISIALISASI ---
 
@@ -89,13 +89,17 @@ def get_answer_from_ai(question, context):
     return answer
 
 def translate_text(text, dest_lang='id'):
+    """Menerjemahkan teks ke bahasa tujuan menggunakan deep-translator."""
     try:
-        translator = Translator()
-        translated = translator.translate(text, dest=dest_lang)
-        return translated.text
+        # Format bahasa untuk deep-translator adalah 'indonesian' bukan 'id'
+        lang_map = {'id': 'indonesian'}
+        target_lang = lang_map.get(dest_lang, dest_lang)
+
+        translated = GoogleTranslator(source='auto', target=target_lang).translate(text)
+        return translated
     except Exception as e:
         print(f"Error saat menerjemahkan: {e}")
-        return text
+        return text # Kembalikan teks asli jika gagal
 
 def search_pexels_image(query):
     search_query = re.sub(r'\W+', ' ', query).strip()

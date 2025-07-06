@@ -8,4 +8,4 @@ moviepy==1.0.3
 Pillow
 python-dotenv
 numpy
-googletrans==4.0.0-rc1
+deep-translator
