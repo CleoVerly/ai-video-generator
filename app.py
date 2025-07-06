@@ -1,4 +1,4 @@
-# app.py - Versi dengan Teks Dinamis dan Latar Berubah
+# app.py - Perbaikan Final untuk NLTK Resource
 
 import streamlit as st
 import os
@@ -14,18 +14,21 @@ import nltk
 
 # Import library untuk video
 from gtts import gTTS
-from moviepy.editor import ImageClip, CompositeVideoClip, AudioFileClip, concatenate_videoclips
+from moviepy.editor import ImageClip, CompositeVideoClip, AudioFileClip
 from PIL import Image, ImageDraw, ImageFont
 import textwrap
 
 # Import library untuk terjemahan
 from deep_translator import GoogleTranslator
 
-# Download 'punkt' untuk pemisahan kalimat (hanya saat pertama kali)
+# --- PERBAIKAN NLTK ADA DI BLOK INI ---
+# Pastikan kita mencari dan mengunduh 'punkt', bukan 'punkt_tab'.
 try:
     nltk.data.find('tokenizers/punkt')
-except LookupError:
+except LookupError: 
+    print("Paket 'punkt' NLTK tidak ditemukan. Mengunduh...")
     nltk.download('punkt')
+# ------------------------------------
 
 # --- 1. KONFIGURASI DAN INISIALISASI ---
 load_dotenv()
@@ -46,7 +49,6 @@ os.makedirs(VIDEO_OUTPUT_DIR, exist_ok=True)
 # --- 2. FUNGSI-FUNGSI HELPER ---
 
 def load_tailwind_cdn():
-    """Menyuntikkan skrip Tailwind CSS."""
     st.markdown("""
         <script src="https://cdn.tailwindcss.com"></script>
         <style> #MainMenu, footer { visibility: hidden; } </style>
@@ -54,10 +56,9 @@ def load_tailwind_cdn():
 
 @st.cache_resource
 def load_models_and_data():
-    """Memuat model embedding dan data dari FAISS & JSON."""
     model = SentenceTransformer(MODEL_NAME_EMBEDDING, device='cpu')
     if not all(os.path.exists(p) for p in [FAISS_PATH, MAPPING_PATH, CHUNKS_PATH]):
-        st.error("Satu atau lebih file data tidak ditemukan.")
+        st.error(f"Satu atau lebih file data tidak ditemukan. Pastikan path sudah benar: {FAISS_PATH}, {MAPPING_PATH}, {CHUNKS_PATH}")
         return None, None, None, None
     index = faiss.read_index(FAISS_PATH)
     with open(MAPPING_PATH, "r", encoding="utf-8") as f: mapping = json.load(f)
@@ -65,11 +66,11 @@ def load_models_and_data():
     return model, index, chunks, mapping
 
 def search_similar_chunks(query, _model, _index, _chunks, _mapping, k=5):
-    """Mencari chunk relevan dan mengekstrak sumber."""
     query_embedding = _model.encode([query])
     distances, indices = _index.search(query_embedding.astype('float32'), k=k)
     
-    relevant_chunks, source_files = [], set()
+    relevant_chunks = []
+    source_files = set()
     for i in indices[0]:
         if i < len(_mapping) and str(i) in _chunks:
             relevant_chunks.append(_chunks[str(i)])
@@ -77,11 +78,12 @@ def search_similar_chunks(query, _model, _index, _chunks, _mapping, k=5):
             source_name = description.split(" - Chunk ")[0]
             source_files.add(source_name.strip())
     
-    if not relevant_chunks: return "Tidak ada konteks relevan.", []
+    if not relevant_chunks:
+        return "Tidak ada konteks relevan.", []
+            
     return "\n\n---\n\n".join(relevant_chunks), list(source_files)
 
 def get_answer_from_ai(question, context):
-    """Mendapatkan jawaban dari AI."""
     prompt = f"Berdasarkan konteks berikut:\n\n{context}\n\nJawablah pertanyaan ini dengan jelas dalam Bahasa Indonesia: '{question}'"
     response = requests.post(
         url="https://openrouter.ai/api/v1/chat/completions",
@@ -92,11 +94,15 @@ def get_answer_from_ai(question, context):
     response.raise_for_status()
     return response.json()['choices'][0]['message']['content']
 
-# --- PERUBAHAN DIMULAI DI SINI ---
+def translate_text(text, dest_lang='id'):
+    try:
+        return GoogleTranslator(source='auto', target=dest_lang).translate(text)
+    except Exception as e:
+        print(f"Error saat menerjemahkan: {e}")
+        return text
 
-# ### FUNGSI DIPERBARUI: Mencari beberapa gambar untuk latar ###
 def search_pexels_images(query, count=5):
-    search_query = re.sub(r'\W+', ' ', query).strip() or "nature abstract"
+    search_query = re.sub(r'\W+', ' ', query).strip() or "nature"
     headers = {"Authorization": PEXELS_API_KEY}
     params = {"query": search_query, "per_page": count, "orientation": "landscape"}
     image_paths = []
@@ -112,16 +118,12 @@ def search_pexels_images(query, count=5):
             image_paths.append(image_path)
     except Exception as e:
         print(f"Gagal mengambil gambar dari Pexels: {e}")
-
-    # Jika gambar kurang dari yang dibutuhkan, buat gambar fallback
     while len(image_paths) < count:
         fallback_path = os.path.join(VIDEO_OUTPUT_DIR, f"background_{len(image_paths)}.jpg")
         Image.new('RGB', (1280, 720), color='#1a202c').save(fallback_path)
         image_paths.append(fallback_path)
-        
     return image_paths
 
-# Fungsi create_text_image_with_pillow (tanpa perubahan)
 def create_text_image_with_pillow(text, size=(1280, 720), font_size=50):
     image = Image.new("RGBA", size, (255, 255, 255, 0))
     draw = ImageDraw.Draw(image)
@@ -143,60 +145,45 @@ def create_text_image_with_pillow(text, size=(1280, 720), font_size=50):
     image.save(text_image_path)
     return text_image_path
 
-# ### FUNGSI BARU: Menggantikan create_video lama dengan versi dinamis ###
 def create_dynamic_video(full_text, bg_image_paths):
-    # Pecah teks menjadi kalimat-kalimat
     sentences = nltk.sent_tokenize(full_text)
     video_clips = []
     files_to_delete = []
     
     for i, sentence in enumerate(sentences):
         if not sentence.strip(): continue
-
-        # 1. Buat audio untuk kalimat ini
         audio_filename = f"speech_{i}.mp3"
         audio_path = os.path.join(VIDEO_OUTPUT_DIR, audio_filename)
         tts = gTTS(text=sentence, lang='id', slow=False)
         tts.save(audio_path)
         files_to_delete.append(audio_path)
-        
         audio_clip = AudioFileClip(audio_path)
         duration = audio_clip.duration
-
-        # 2. Pilih gambar latar (berputar jika kalimat > gambar)
         bg_path = bg_image_paths[i % len(bg_image_paths)]
         background_clip = ImageClip(bg_path, duration=duration)
-
-        # 3. Buat gambar teks untuk kalimat ini
         text_image_path = create_text_image_with_pillow(sentence, size=background_clip.size)
         files_to_delete.append(text_image_path)
         text_clip = ImageClip(text_image_path, duration=duration)
-
-        # 4. Gabungkan menjadi satu segmen video
         segment_clip = CompositeVideoClip([background_clip, text_clip]).set_audio(audio_clip)
         video_clips.append(segment_clip)
 
     if not video_clips:
         raise ValueError("Tidak ada segmen video yang bisa dibuat.")
 
-    # Gabungkan semua segmen video menjadi satu
     final_clip = concatenate_videoclips(video_clips)
     video_filename = f"output_{int(time.time())}.mp4"
     video_output_path = os.path.join(VIDEO_OUTPUT_DIR, video_filename)
     final_clip.write_videofile(video_output_path, fps=24, codec='libx264', audio_codec='aac', logger=None)
     
-    # Hapus semua file sementara (audio, gambar teks, dan gambar latar)
     for f in files_to_delete + bg_image_paths:
         if os.path.exists(f): os.remove(f)
         
     return video_output_path
 
-# --- PERUBAHAN SELESAI ---
 
 # --- 3. MEMBANGUN APLIKASI STREAMLIT ---
 
 load_tailwind_cdn()
-# Sesuaikan pemanggilan fungsi load_models_and_data
 embedding_model, faiss_index, all_chunks, mapping = load_models_and_data()
 
 st.markdown("<h1 class='text-4xl font-bold text-center text-gray-800 my-4'>🎬 AI Video Generator Dinamis</h1>", unsafe_allow_html=True)
@@ -213,20 +200,16 @@ if embedding_model and faiss_index and all_chunks:
                 with st.spinner("Meminta jawaban dari AI..."):
                     answer_text = get_answer_from_ai(prompt, context)
                 
-                # ### FITUR BARU: Menampilkan sumber jawaban di UI ###
                 if sources:
                     source_str = ", ".join(sources)
                     st.caption(f"ℹ️ Jawaban diambil berdasarkan konteks dari: **{source_str}**")
                 
                 st.info(f"**Narasi Video:** {answer_text}")
                 
-                # Kita tidak lagi menggunakan fungsi translate karena AI sudah diminta menjawab dalam Bahasa Indonesia
-                
                 with st.spinner("Mencari gambar latar belakang..."):
                     bg_image_paths = search_pexels_images(query=prompt, count=5)
 
                 with st.spinner("Merender video... Proses ini paling lama."):
-                    # Ganti pemanggilan ke fungsi video dinamis yang baru
                     final_video_path = create_dynamic_video(answer_text, bg_image_paths)
                     
                 st.success("Video berhasil dibuat!")
